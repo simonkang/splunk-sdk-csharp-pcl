@@ -123,16 +123,24 @@ namespace Splunk.Client
         /// </returns>
         public static async Task<SearchResultStream> CreateAsync(Response response)
         {
-            XmlReader reader = response.XmlReader;
-
-            await reader.MoveToDocumentElementAsync("results", "response").ConfigureAwait(false);
-
-            if (reader.Name == "response")
-            {
-                await response.ThrowRequestExceptionAsync().ConfigureAwait(false);
-            }
-
+            await VerifyResponse(response);
             var stream = new SearchResultStream(response);
+            return stream;
+        }
+
+        /// <summary>
+        /// Creates a new <see cref="SearchResultStream"/>
+        /// using the Task specified <see cref="Response"/>.
+        /// </summary>
+        /// <param name="responseTask">
+        /// An awaitable Task from which search results are read.
+        /// </param>
+        /// <returns>
+        /// A <see cref="SearchResultStream"/> object.
+        /// </returns>
+        public static SearchResultStream Create(Task<Response> responseTask)
+        {
+            var stream = new SearchResultStream(responseTask);
             return stream;
         }
 
@@ -151,7 +159,10 @@ namespace Splunk.Client
             //// TODO: BUG FIX: Cancellation completes immediately after Cancel is called, in spite of the fact that 
             //// this.awaiter.task has not completed.
 
-            this.response.Dispose();
+            if (this.response != null)
+            {
+                this.response.Dispose();
+            }
         }
 
         /// <summary>
@@ -201,6 +212,17 @@ namespace Splunk.Client
         {
             this.EnsureNotDisposed();
 
+            if (responseAwaiter != null)
+            {
+                await responseAwaiter;
+                if (responseAwaiter.Exception != null)
+                {
+                    this.OnError(responseAwaiter.Exception);
+                    this.Dispose();
+                    return;
+                }
+            }
+
             for (var result = await this.awaiter; result != null; result = await this.awaiter)
             {
                 this.metadata = result.Metadata;
@@ -209,14 +231,19 @@ namespace Splunk.Client
 
             this.EnsureAwaiterSucceeded();
             this.OnCompleted();
+            if (responseAwaiter != null)
+            {
+                this.Dispose();
+            }
         }
 
         #endregion
 
         #region Privates/internals
 
-        readonly Response response;
-        readonly Awaiter awaiter;
+        Response response;
+        Task<Response> responseAwaiter;
+        Awaiter awaiter;
         int disposed;
 
         volatile SearchResultMetadata metadata;
@@ -228,9 +255,33 @@ namespace Splunk.Client
             this.awaiter = new Awaiter(this);
         }
 
+        SearchResultStream(Task<Response> responseTask)
+        {
+            this.metadata = SearchResultMetadata.Missing;
+            this.responseAwaiter = responseTask.ContinueWith(async r =>
+                {
+                    this.response = r.Result;
+                    await VerifyResponse(this.response);
+                    this.awaiter = new Awaiter(this);
+                    return this.response;
+                }).Unwrap();
+        }
+
         ReadState ReadState
         {
             get { return this.response.XmlReader.ReadState; }
+        }
+
+        static async Task VerifyResponse(Response response)
+        {
+            XmlReader reader = response.XmlReader;
+
+            await reader.MoveToDocumentElementAsync("results", "response").ConfigureAwait(false);
+
+            if (reader.Name == "response")
+            {
+                await response.ThrowRequestExceptionAsync().ConfigureAwait(false);
+            }
         }
 
         void EnsureAwaiterSucceeded()

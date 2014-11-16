@@ -257,6 +257,25 @@ namespace Splunk.Client
         Task<SearchResultStream> ExportSearchResultsAsync(string search, SearchExportArgs args = null);
 
         /// <summary>
+        /// Creates an observable sequence of search results.
+        /// </summary>
+        /// <remarks>
+        /// This method uses the <a href="http://goo.gl/vJvIXv">GET
+        /// search/jobs/export</a> endpoint to export an observable sequence of
+        /// search results.
+        /// </remarks>
+        /// <param name="search">
+        /// A Splunk search command.
+        /// </param>
+        /// <param name="args">
+        /// Optional export arguments.
+        /// </param>
+        /// <returns>
+        /// An object representing an observable sequence of search result previews.
+        /// </returns>
+        IObservable<SearchResult> ExportSearchResultsObservable(string search, SearchExportArgs args = null);
+
+        /// <summary>
         /// Asycnrononusly creates and executes a normal or blocking Splunk search job.
         /// </summary>
         /// <param name="search">
@@ -388,6 +407,12 @@ namespace Splunk.Client
         {
             Contract.Requires<ArgumentNullException>(search != null);
             return default(Task<SearchResultStream>);
+        }
+
+        public IObservable<SearchResult> ExportSearchResultsObservable(string search, SearchExportArgs args = null)
+        {
+            Contract.Requires<ArgumentNullException>(search != null);
+            return default(IObservable<SearchResult>);
         }
         
         public Task<Job> SearchAsync(string search, int count = 100, 

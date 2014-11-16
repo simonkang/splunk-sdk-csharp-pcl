@@ -72,7 +72,7 @@ namespace Splunk.Client.Examples
 
             using (stream = await job.GetSearchResultsAsync())
             {
-                var manualResetEvent = new ManualResetEvent(true);
+                var manualResetEvent = new ManualResetEvent(false);
 
                 stream.Subscribe(new Observer<SearchResult>(
                     onNext: (result) =>
@@ -90,7 +90,30 @@ namespace Splunk.Client.Examples
                         manualResetEvent.Set();
                     }));
 
-                manualResetEvent.Reset();
+                manualResetEvent.WaitOne();
+            }
+
+            //// Search : Push Model (subscription IObservable)
+            {
+                var observableStream = service.ExportSearchResultsObservable("search index=_internal | head 10");
+                
+                var manualResetEvent = new ManualResetEvent(false);
+                observableStream.Subscribe(new Observer<SearchResult>(
+                    onNext: (result) =>
+                    {
+                        Console.WriteLine(string.Format("{0:D8}: {1}", stream.ReadCount, result));
+                    },
+                    onError: (e) =>
+                    {
+                        Console.WriteLine(string.Format("SearchResults error: {0}", e.Message));
+                        manualResetEvent.Set();
+                    },
+                    onCompleted: () =>
+                    {
+                        Console.WriteLine("End of search results");
+                        manualResetEvent.Set();
+                    }));
+
                 manualResetEvent.WaitOne();
             }
         }
