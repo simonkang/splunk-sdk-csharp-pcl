@@ -307,6 +307,31 @@ namespace Splunk.Client
         }
 
         /// <inheritdoc/>
+        public virtual IObservable<SearchResult> ExportSearchResultsObservable(string search, SearchExportArgs args = null)
+        {
+            var arguments = new Argument[] 
+            { 
+                new Argument("search", search) 
+            }
+            .AsEnumerable();
+
+            if (args != null)
+            {
+                arguments = arguments.Concat(args);
+            }
+
+            var responseTask = this.Context.GetAsync(this.Namespace, SearchJobsExport, arguments)
+                .ContinueWith(async r =>
+                    {
+                        await r.Result.EnsureStatusCodeAsync(HttpStatusCode.OK).ConfigureAwait(false);
+                        return r.Result;
+                    }).Unwrap();
+
+            var stream = SearchResultStream.Create(responseTask);
+            return stream;
+        }
+
+        /// <inheritdoc/>
         public virtual async Task<Job> SearchAsync(string search, int count = 100, 
             ExecutionMode mode = ExecutionMode.Normal, JobArgs args = null, 
             CustomJobArgs customArgs = null)
